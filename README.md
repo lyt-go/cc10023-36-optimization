@@ -69,6 +69,54 @@ npm run dev
 | 流水线调度 | `pipeline_schedule` | 调度配置 | 调度编号、关联流水线、Cron表达式 |
 | 业务场景标注 | `scenario_label` | 场景标注 | 标注编号、场景名称、关联特征 |
 
+## 评估分数校验与组验收
+
+特征重要性指标里经常混入空值、空字符串、NaN、无穷或非数值。旧实现直接
+`float(...)`，一条坏值就会让整批排序失败。现在的规则：
+
+| 输入 | 状态 | 是否参与排行 |
+| --- | --- | --- |
+| `0` / `0.0` / `"0"` 等有效数值 | 有效 | 是，零分正常入榜 |
+| `""` / `null` / 缺字段 | 待补分 | 否，保留原因 |
+| `NaN` / `±Infinity` / 非数值 | 无效 | 否，保留原因（`nan`/`infinity`/`non_numeric`） |
+
+打分与排行互不影响：单条坏值只标记自己，不会让整批失败；局部排行也
+**不会**触发模型注册。
+
+### 组验收
+
+申请以登记的**必评样本清单**为准，`app/services/acceptance.py` 负责状态机：
+
+- 每份必评样本都必须拿到有效分数且不低于 `0.7`，整组才通过；均值不作为放行依据；
+- 本次验收中已确认有效的分数会被锁定，后续补录不能覆盖；
+- 状态为 `待补证` 时可以继续补交缺失证据；
+- 状态为 `已通过` / `不通过` 的申请已经结束，旧回执不会被后来的数据改写，需要新开验收；
+- 策略 `early_close`（默认）：一旦某份已确认有效的必评样本低于门槛，立即结案为不通过；
+  策略 `wait_complete`：保留待补证，等证据齐备后再因该低分结束；
+- 只有整组通过才会把有效评估数据交给模型注册中心注册；未通过 / 待补证只登记
+  一条「待验收」关联记录，并带上本次验收实际拿到的评估来源、状态、指标版本与例外记录。
+- 例外记录会随补录推进：后来被修复的问题标为「已消解」，同组同值的重复异常不重复登记。
+- 手工动作也不能绕过验收：`不通过` / `待补证` 的模型不能「确认注册」或部署。
+
+前端的「模型评估验收」页（`/acceptance`）提供申请、提交 / 补录、提前结案、回执与
+注册中心记录查看。
+
+### 接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/feature_iv/scores/validate` | 校验一批评分，返回 `ranked/pending/invalid` |
+| POST | `/api/feature_iv/scores/rank` | 同上，排行别名 |
+| GET | `/api/feature_iv/rank?eval_ids=1,2,3` | 按评估编号排行并给出坏值原因 |
+| POST | `/api/model_registry/acceptance` | 创建验收申请（登记必评样本清单） |
+| POST | `/api/model_registry/acceptance/{id}/submit` | 提交 / 补录评分 |
+| POST | `/api/model_registry/acceptance/{id}/close` | 提前结案 |
+| GET | `/api/model_registry/acceptance/{id}/receipt` | 查询当次回执 |
+| GET | `/api/model_registry/acceptance/{id}/exceptions` | 查询同组例外记录 |
+| GET | `/api/model_registry/acceptance-record/{验收编号}` | 查询注册中心落地记录 |
+
+`/api/acceptance/*` 是同一组能力的独立命名空间，便于单独调用。
+
 ## 约定
 
 - 全部模块共享`frontend/src/views/WorkbenchView.vue|tsx`和一套资源路由。

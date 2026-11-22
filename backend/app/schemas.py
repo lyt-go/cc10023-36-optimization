@@ -29,3 +29,33 @@ class EntryPayload(BaseModel):
 class ActionPayload(BaseModel):
     action: str
     remark: str | None = None
+
+
+# ── 模型评估验收 ──
+class AcceptanceCreatePayload(BaseModel):
+    required_samples: list[str] = Field(default_factory=list)
+    group_id: str | int | None = None
+    group_name: str | None = None
+    metric_version: str | None = None
+    metric_snapshot: Any = None
+    policy: str = "early_close"
+    scores: Any = None
+    sources: Any = None
+    algorithm: str = "xgboost"
+    auto_submit: bool = False
+
+
+class AcceptanceSubmitPayload(BaseModel):
+    scores: Any = None
+    sources: Any = None
+    note: str | None = None
+
+
+class AcceptanceClosePayload(BaseModel):
+    reason: str | None = None
+
+
+class AcceptanceRankPayload(BaseModel):
+    scores: Any = None
+    eval_ids: list[int] | None = None
+    threshold: float = 0.7

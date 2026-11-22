@@ -8,15 +8,24 @@ from typing import Any
 
 from app.seed import SEED_ROWS
 
+# 验收流程的内部表：不是可浏览的业务模块，不参与运营概览统计。
+AUXILIARY_TABLES = {
+    "evaluation_acceptance",
+    "evaluation_checklist",
+    "evaluation_exception",
+}
+
 
 class Store:
     def __init__(self) -> None:
         self._tables: dict[str, list[dict[str, Any]]] = {
             name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
         }
+        for name in AUXILIARY_TABLES:
+            self._tables.setdefault(name, [])
 
     def module_names(self) -> list[str]:
-        return sorted(self._tables)
+        return sorted(name for name in self._tables if name not in AUXILIARY_TABLES)
 
     def rows(self, module: str) -> list[dict[str, Any]]:
         return self._tables.setdefault(module, [])
